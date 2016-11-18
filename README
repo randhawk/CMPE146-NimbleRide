@@ -1,10 +1,6 @@
------------------------------------------------------------------------------
-To get started, have a look at L5_Application/main.cpp and the example tasks.
-
-You can change a #define 0 to #define 1 for one example at a time and look
-through the code of each example.
-
-The general idea is to interact with the project through terminal commands.
------------------------------------------------------------------------------
-See "ChangeLog" for the changes made to the sample project source code.
------------------------------------------------------------------------------
+1. Git clone project from https://github.com/randhawk/CMPE146-NimbleRide
+2. Download and open Eclipse 
+3. Import the project
+4. Build the project
+5. Download and open hyperload
+6. Flash “lpc1758_freertos\_build\lpc1758_freertos.hex” to the board
