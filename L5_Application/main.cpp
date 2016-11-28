@@ -25,6 +25,27 @@
  */
 #include "tasks.hpp"
 #include "examples/examples.hpp"
+#include "stdio.h"
+#include "adc0.h"
+
+class adc0_task : public scheduler_task {
+	public:
+		adc0_task(uint8_t priority): scheduler_task("adc", 2000, priority)
+		{}
+		bool run(void *p){
+			vTaskDelay(1000);
+
+			//use pre-defined adc0.h class
+			int batteryV = adc0_get_reading(4)*0.000805;
+
+			return true;
+		}
+		bool init(void){
+			//adc0 already initialized at startup
+			LPC_PINCON->PINSEL3 |= (3<<28); //configure p1.30 as adc (ad0.4)
+			return true;
+		}
+};
 
 /**
  * The main() creates tasks or "threads".  See the documentation of scheduler_task class at scheduler_task.hpp
@@ -52,7 +73,10 @@ int main(void)
      * such that it can save remote control codes to non-volatile memory.  IR remote
      * control codes can be learned by typing the "learn" terminal command.
      */
-    scheduler_add_task(new terminalTask(PRIORITY_HIGH));
+
+    scheduler_add_task(new adc0_task(PRIORITY_HIGH));
+
+	scheduler_add_task(new terminalTask(PRIORITY_HIGH));
 
     /* Consumes very little CPU, but need highest priority to handle mesh network ACKs */
     scheduler_add_task(new wirelessTask(PRIORITY_CRITICAL));
