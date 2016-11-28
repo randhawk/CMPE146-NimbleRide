@@ -28,21 +28,109 @@
 #include "stdio.h"
 #include "adc0.h"
 
+/*
+ * Voltage Levels:
+ * 3.3v max (100 %)
+ * 2.97 - 90 %			if under, start charging automatically
+ * 2.64 - 80 %
+ * 2.31 - 70 %
+ * 1.98 - 60 %
+ * 1.65 - 50 %
+ * 1.32 - 40 %
+ * 0.99 - 30 %
+ * 0.66 - 20 %
+ * 0.33 - 10 %			if under, can no longer use motor; must retain final 10 % to operate board
+ */
+
+float batteryV = 0;
+float batteryPct = 0;
+int samplesTaken = 0, debug = 0;;
+
 class adc0_task : public scheduler_task {
 	public:
 		adc0_task(uint8_t priority): scheduler_task("adc", 2000, priority)
 		{}
 		bool run(void *p){
-			vTaskDelay(1000);
+			vTaskDelay(1);
 
 			//use pre-defined adc0.h class
-			int batteryV = adc0_get_reading(4)*0.000805;
+			batteryV += adc0_get_reading(4) * 0.000805;
+			samplesTaken++;
+
+			if(samplesTaken % 500 == 0){
+				batteryV /= 500;
+				batteryPct = batteryV / .033;
+				batteryV = 0;
+			}
+
+			if(samplesTaken % 1000 == 0){
+				printf("DEBUG: Battery Level = %f\n", batteryPct);
+				samplesTaken = 0;
+			}
 
 			return true;
 		}
 		bool init(void){
 			//adc0 already initialized at startup
 			LPC_PINCON->PINSEL3 |= (3<<28); //configure p1.30 as adc (ad0.4)
+			return true;
+		}
+};
+
+class mosfet_task : public scheduler_task {
+	public:
+		mosfet_task(uint8_t priority): scheduler_task("mosfet", 2000, priority)
+		{}
+		bool run(void *p){
+			vTaskDelay(10);
+			debug++;
+
+			if(batteryPct < 90){ //if battery is less than 90 %, charge
+				LPC_GPIO2->FIOCLR = (1<<1); //activate mosfet at p2.1 (generator)
+				if(debug % 100 == 0){
+					debug = 0;
+					printf("DEBUG: Generator Activated\n");
+				}
+			}
+			else if(batteryPct > 98){
+				LPC_GPIO2->FIOSET = (1<<1); //deactivate mosfet at p2.1 (generator)
+				if(debug % 100 == 0){
+					debug = 0;
+					printf("DEBUG: Generator Deactivated\n");
+				}
+			}
+
+			if(batteryPct < 10){ //if battery is under 10 %, deactivate motor
+				LPC_GPIO2->FIOSET = (1<<3); //deactivate mosfet at p2.3 (motor)
+				if(debug % 100 == 0){
+					debug = 0;
+					printf("DEBUG: Motor Deactivated\n");
+				}
+			}
+			else if(LPC_GPIO1->FIOPIN &(1<<15)){ //if battery is greater than 10 % and button pressed, activate motor
+				LPC_GPIO2->FIOCLR = (1<<3); //activate mosfet at p2.3 (motor)
+				if(debug % 100 == 0){
+					debug = 0;
+					printf("DEBUG: Motor Activated\n");
+				}
+			}
+			else{ //button has not been pressed
+				LPC_GPIO2->FIOSET = (1<<3); //deactivate mosfet at p2.3 (motor)
+				if(debug % 100 == 0){
+					debug = 0;
+					printf("DEBUG: Motor Not Active\n");
+				}
+			}
+
+			return true;
+		}
+		bool init(void){
+			LPC_PINCON->PINSEL2 &= ~(3<<0); //configure p1.15 as gpio
+
+			LPC_PINCON->PINSEL4 &= ~(3<<2); //configure p2.1 as gpio
+			LPC_PINCON->PINSEL4 &= ~(3<<6); //configure p2.3 as gpio
+			LPC_GPIO2->FIODIR |= (1<<1); //initialize p2.1 as output (generator)
+			LPC_GPIO2->FIODIR |= (1<<3); //initialize p2.3 as output (motor)
 			return true;
 		}
 };
@@ -75,6 +163,7 @@ int main(void)
      */
 
     scheduler_add_task(new adc0_task(PRIORITY_HIGH));
+    scheduler_add_task(new mosfet_task(PRIORITY_HIGH));
 
 	scheduler_add_task(new terminalTask(PRIORITY_HIGH));
 
