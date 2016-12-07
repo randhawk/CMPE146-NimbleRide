@@ -27,6 +27,7 @@
 #include "examples/examples.hpp"
 #include "stdio.h"
 #include "adc0.h"
+#include "stdlib.h"
 
 /*
  * Voltage Levels:
@@ -64,7 +65,7 @@ class adc0_task : public scheduler_task {
 			}
 
 			if(samplesTaken % 1000 == 0){
-				printf("DEBUG: Battery Level = %f\n", batteryPct);
+				printf("DEBUG - ADC0: Battery Level = %f\n", batteryPct);
 				samplesTaken = 0;
 			}
 
@@ -89,14 +90,14 @@ class mosfet_task : public scheduler_task {
 				LPC_GPIO2->FIOCLR = (1<<1); //activate mosfet at p2.1 (generator)
 				if(debug % 100 == 0){
 					debug = 0;
-					printf("DEBUG: Generator Activated\n");
+					printf("DEBUG - MOSFET: Generator Activated\n");
 				}
 			}
 			else if(batteryPct > 98){
 				LPC_GPIO2->FIOSET = (1<<1); //deactivate mosfet at p2.1 (generator)
 				if(debug % 100 == 0){
 					debug = 0;
-					printf("DEBUG: Generator Deactivated\n");
+					printf("DEBUG - MOSFET: Generator Deactivated\n");
 				}
 			}
 
@@ -104,21 +105,21 @@ class mosfet_task : public scheduler_task {
 				LPC_GPIO2->FIOSET = (1<<3); //deactivate mosfet at p2.3 (motor)
 				if(debug % 100 == 0){
 					debug = 0;
-					printf("DEBUG: Motor Deactivated\n");
+					printf("DEBUG - MOSFET: Motor Deactivated\n");
 				}
 			}
 			else if(LPC_GPIO1->FIOPIN &(1<<15)){ //if battery is greater than 10 % and button pressed, activate motor
 				LPC_GPIO2->FIOCLR = (1<<3); //activate mosfet at p2.3 (motor)
 				if(debug % 100 == 0){
 					debug = 0;
-					printf("DEBUG: Motor Activated\n");
+					printf("DEBUG - MOSFET: Motor Activated\n");
 				}
 			}
 			else{ //button has not been pressed
 				LPC_GPIO2->FIOSET = (1<<3); //deactivate mosfet at p2.3 (motor)
 				if(debug % 100 == 0){
 					debug = 0;
-					printf("DEBUG: Motor Not Active\n");
+					printf("DEBUG - MOSFET: Motor Not Active\n");
 				}
 			}
 
@@ -133,6 +134,84 @@ class mosfet_task : public scheduler_task {
 			LPC_GPIO2->FIODIR |= (1<<3); //initialize p2.3 as output (motor)
 			return true;
 		}
+};
+
+void uart2_init(uint32_t baud){
+	LPC_PINCON->PINSEL4 &= ~(15<<16); //clear p2.8 as txd2 and p2.9 as rxd2
+	LPC_PINCON->PINSEL4 |= (10<<16); //set p2.8 as txd2 and p2.9 as rxd2
+	LPC_SC->PCONP |= (1<<24); //power
+	LPC_SC->PCLKSEL1 &= ~(3<<16); //clear uart2 clock msb for div 1
+	LPC_SC->PCLKSEL1 |= (1<<16); //enable uart2 clock div 1
+	LPC_UART2->LCR |= 3; //set data size as a byte
+	LPC_UART2->LCR |= (1<<7); //enable DLAB bit
+	uint16_t div = (48*1000*1000)/ (16*baud); //calculate speed value
+	LPC_UART2->DLL = div;
+	LPC_UART2->DLM = (div>>8);
+	LPC_UART2->LCR &= ~(1<<7); //disable DLAB bit
+}
+
+void uart2_putchar(char out){
+	LPC_UART2->THR = out; //store data in transmission buffer to be sent
+	while(1){
+		if (LPC_UART2->LSR & (1<<5)) //wait until data is sent
+			break;
+	}
+	printf("DEBUG - UART: putchar sent %c = %x\n", out, out);
+}
+
+void uart2_end(){ //communication end from screen datasheet
+	uart2_putchar(0xFF);
+	uart2_putchar(0xFF);
+	uart2_putchar(0xFF);
+}
+
+void uart2_send(int value){
+			value = (value == 100)? 99: value;
+			char num [2];
+			sprintf(num, "%d", value);
+			uart2_putchar('j');
+			uart2_putchar('0');
+			uart2_putchar('.');
+			uart2_putchar('v');
+			uart2_putchar('a');
+			uart2_putchar('l');
+			uart2_putchar('=');
+			uart2_putchar(num[0]);
+			if(value > 9)
+				uart2_putchar(num[1]);
+			uart2_end();
+			printf("DEBUG - UART: Sent value: %i\n", value);
+}
+
+class uart2_send_task : public scheduler_task {
+	public:
+	uart2_send_task(uint8_t priority): scheduler_task("uart2 send", 2000, priority)
+	{}
+	bool run(void *p){
+		vTaskDelay(1);
+		if(LPC_GPIO1->FIOPIN &(1<<14)){ //information printed upon on-board button press
+			LPC_GPIO1->FIOCLR = (1<<8);
+			uart2_send(0);
+			vTaskDelay(1000);
+			uart2_send(25);
+			vTaskDelay(1000);
+			uart2_send(50);
+			vTaskDelay(1000);
+			uart2_send(75);
+			vTaskDelay(1000);
+			uart2_send(100);
+		}
+		else
+			LPC_GPIO1->FIOSET = (1<<8);
+		return true;
+	}
+	bool init(void){
+		LPC_PINCON->PINSEL2 &= ~(3<<28); //configure lower half of port1 as gpio
+
+		LPC_PINCON->PINSEL2 &= ~(3<<0); //configure lower half of port1 as gpio
+		LPC_GPIO1->FIODIR |= (1<<8); //initialize LED
+		return true;
+	}
 };
 
 /**
@@ -162,8 +241,10 @@ int main(void)
      * control codes can be learned by typing the "learn" terminal command.
      */
 
-    scheduler_add_task(new adc0_task(PRIORITY_HIGH));
-    scheduler_add_task(new mosfet_task(PRIORITY_HIGH));
+//    scheduler_add_task(new adc0_task(PRIORITY_HIGH));
+//    scheduler_add_task(new mosfet_task(PRIORITY_HIGH));
+    uart2_init(38400);
+    scheduler_add_task(new uart2_send_task(PRIORITY_HIGH));
 
 	scheduler_add_task(new terminalTask(PRIORITY_HIGH));
 
