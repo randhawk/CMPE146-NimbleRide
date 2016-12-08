@@ -28,6 +28,7 @@
 #include "stdio.h"
 #include "adc0.h"
 #include "stdlib.h"
+#include "math.h"
 
 /*
  * Voltage Levels:
@@ -165,7 +166,7 @@ void uart2_end(){ //communication end from screen datasheet
 	uart2_putchar(0xFF);
 }
 
-void uart2_send(int value){
+void screenSlider(int value){
 			value = (value == 100)? 99: value;
 			char num [2];
 			sprintf(num, "%d", value);
@@ -180,7 +181,49 @@ void uart2_send(int value){
 			if(value > 9)
 				uart2_putchar(num[1]);
 			uart2_end();
-			printf("DEBUG - UART: Sent value: %i\n", value);
+			printf("DEBUG - SCREEN: Slider sent value: %i\n", value);
+}
+
+void screenTextPct(int value){
+			value = (value == 100)? 99: value;
+			char num [2];
+			sprintf(num, "%d", value);
+			uart2_putchar('t');
+			uart2_putchar('1');
+			uart2_putchar('.');
+			uart2_putchar('t');
+			uart2_putchar('x');
+			uart2_putchar('t');
+			uart2_putchar('=');
+			uart2_putchar('"');
+			uart2_putchar(num[0]);
+			if(value > 9)
+				uart2_putchar(num[1]);
+			uart2_putchar('"');
+			uart2_end();
+			printf("DEBUG - SCREEN: Txt pct sent value: %i\n", value);
+}
+
+void screenTextV(float value){
+			value = (value >= 100)? 99.99: value;
+			char num [5];
+			sprintf(num, "%f", value);
+			uart2_putchar('t');
+			uart2_putchar('0');
+			uart2_putchar('.');
+			uart2_putchar('t');
+			uart2_putchar('x');
+			uart2_putchar('t');
+			uart2_putchar('=');
+			uart2_putchar('"');
+			uart2_putchar(num[0]);
+			uart2_putchar(num[1]);
+			uart2_putchar(num[2]);
+			uart2_putchar(num[3]);
+			uart2_putchar(num[4]);
+			uart2_putchar('"');
+			uart2_end();
+			printf("DEBUG - SCREEN: Txt V sent value: %f\n", value);
 }
 
 class uart2_send_task : public scheduler_task {
@@ -188,28 +231,17 @@ class uart2_send_task : public scheduler_task {
 	uart2_send_task(uint8_t priority): scheduler_task("uart2 send", 2000, priority)
 	{}
 	bool run(void *p){
-		vTaskDelay(1);
-		if(LPC_GPIO1->FIOPIN &(1<<14)){ //information printed upon on-board button press
-			LPC_GPIO1->FIOCLR = (1<<8);
-			uart2_send(0);
-			vTaskDelay(1000);
-			uart2_send(25);
-			vTaskDelay(1000);
-			uart2_send(50);
-			vTaskDelay(1000);
-			uart2_send(75);
-			vTaskDelay(1000);
-			uart2_send(100);
-		}
-		else
-			LPC_GPIO1->FIOSET = (1<<8);
+		vTaskDelay(1000);
+		int valuePct = int(batteryPct);
+		float valueV = batteryPct * .033;
+		valueV = roundf(valueV * 100) / 100;
+		screenTextV(valueV);
+		screenTextPct(valuePct);
+		screenSlider(valuePct);
 		return true;
 	}
 	bool init(void){
-		LPC_PINCON->PINSEL2 &= ~(3<<28); //configure lower half of port1 as gpio
-
-		LPC_PINCON->PINSEL2 &= ~(3<<0); //configure lower half of port1 as gpio
-		LPC_GPIO1->FIODIR |= (1<<8); //initialize LED
+	    uart2_init(38400);
 		return true;
 	}
 };
@@ -241,9 +273,8 @@ int main(void)
      * control codes can be learned by typing the "learn" terminal command.
      */
 
-//    scheduler_add_task(new adc0_task(PRIORITY_HIGH));
+    scheduler_add_task(new adc0_task(PRIORITY_HIGH));
 //    scheduler_add_task(new mosfet_task(PRIORITY_HIGH));
-    uart2_init(38400);
     scheduler_add_task(new uart2_send_task(PRIORITY_HIGH));
 
 	scheduler_add_task(new terminalTask(PRIORITY_HIGH));
