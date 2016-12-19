@@ -31,17 +31,20 @@
 #include "math.h"
 
 /*
- * Voltage Levels:
- * 3.3v max (100 %)
- * 2.97 - 90 %			if under, start charging automatically
- * 2.64 - 80 %
- * 2.31 - 70 %
- * 1.98 - 60 %
- * 1.65 - 50 %
- * 1.32 - 40 %
- * 0.99 - 30 %
- * 0.66 - 20 %
- * 0.33 - 10 %			if under, can no longer use motor; must retain final 10 % to operate board
+ * R1 = 1500, R2 = 100
+ * ADC max is 3.3V
+ *
+ * Voltage Levels from Voltage Divider:
+ * 2.625v max (100 %) = 42V
+ * 2.588 - 90 % = 41.4	if under, start charging automatically
+ * 2.55 - 80 % = 40.8
+ * 2.513 - 70 % = 40.2
+ * 2.475 - 60 % = 39.6
+ * 2.438 - 50 % = 39
+ * 2.4 - 40 % = 38.4
+ * 2.363 - 30 % = 37.8
+ * 2.325 - 20 % = 37.2
+ * 2.288 - 10 % = 36.6	if under, can no longer use motor; must retain final 10 % to operate board
  */
 
 float batteryV = 0;
@@ -61,7 +64,7 @@ class adc0_task : public scheduler_task {
 
 			if(samplesTaken % 500 == 0){
 				batteryV /= 500;
-				batteryPct = batteryV / .033;
+				batteryPct = batteryV / .02625;
 				batteryV = 0;
 			}
 
@@ -274,7 +277,7 @@ int main(void)
      */
 
     scheduler_add_task(new adc0_task(PRIORITY_HIGH));
-//    scheduler_add_task(new mosfet_task(PRIORITY_HIGH));
+    scheduler_add_task(new mosfet_task(PRIORITY_HIGH));
     scheduler_add_task(new uart2_send_task(PRIORITY_HIGH));
 
 	scheduler_add_task(new terminalTask(PRIORITY_HIGH));
