@@ -106,21 +106,21 @@ class mosfet_task : public scheduler_task {
 			}
 
 			if(batteryPct < 10){ //if battery is under 10 %, deactivate motor
-				LPC_GPIO2->FIOSET = (1<<3); //deactivate mosfet at p2.3 (motor)
+				LPC_GPIO2->FIOCLR = (1<<3); //deactivate mosfet at p2.3 (motor)
 				if(debug % 100 == 0){
 					debug = 0;
 					printf("DEBUG - MOSFET: Motor Deactivated\n");
 				}
 			}
 			else if(LPC_GPIO1->FIOPIN &(1<<15)){ //if battery is greater than 10 % and button pressed, activate motor
-				LPC_GPIO2->FIOCLR = (1<<3); //activate mosfet at p2.3 (motor)
+				LPC_GPIO2->FIOSET = (1<<3); //activate mosfet at p2.3 (motor)
 				if(debug % 100 == 0){
 					debug = 0;
 					printf("DEBUG - MOSFET: Motor Activated\n");
 				}
 			}
 			else{ //button has not been pressed
-				LPC_GPIO2->FIOSET = (1<<3); //deactivate mosfet at p2.3 (motor)
+				LPC_GPIO2->FIOCLR = (1<<3); //deactivate mosfet at p2.3 (motor)
 				if(debug % 100 == 0){
 					debug = 0;
 					printf("DEBUG - MOSFET: Motor Not Active\n");
