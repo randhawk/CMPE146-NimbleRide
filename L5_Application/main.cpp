@@ -112,7 +112,7 @@ class mosfet_task : public scheduler_task {
 					printf("DEBUG - MOSFET: Motor Deactivated\n");
 				}
 			}
-			else if(LPC_GPIO1->FIOPIN &(1<<15)){ //if battery is greater than 10 % and button pressed, activate motor
+			else if( (LPC_GPIO1->FIOPIN &(1<<15)) || (LPC_GPIO2->FIOPIN &(1<<5))){ //if battery is greater than 10 % and button pressed, activate motor
 				LPC_GPIO2->FIOSET = (1<<3); //activate mosfet at p2.3 (motor)
 				if(debug % 100 == 0){
 					debug = 0;
@@ -130,10 +130,11 @@ class mosfet_task : public scheduler_task {
 			return true;
 		}
 		bool init(void){
-			LPC_PINCON->PINSEL2 &= ~(3<<0); //configure p1.15 as gpio
+			LPC_PINCON->PINSEL2 &= ~(3<<0); //configure p1.15 as gpio for debugging motor
 
 			LPC_PINCON->PINSEL4 &= ~(3<<2); //configure p2.1 as gpio
 			LPC_PINCON->PINSEL4 &= ~(3<<6); //configure p2.3 as gpio
+			LPC_PINCON->PINSEL4 &= ~(3<<10); //configure p2.5 as gpio
 			LPC_GPIO2->FIODIR |= (1<<1); //initialize p2.1 as output (generator)
 			LPC_GPIO2->FIODIR |= (1<<3); //initialize p2.3 as output (motor)
 			return true;
