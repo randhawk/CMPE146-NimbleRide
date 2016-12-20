@@ -236,7 +236,7 @@ class uart2_send_task : public scheduler_task {
 	bool run(void *p){
 		vTaskDelay(1000);
 		int valuePct = int(batteryPct);
-		float valueV = batteryPct * .033;
+		float valueV = batteryPct * .02625;
 		valueV = roundf(valueV * 100) / 100;
 		screenTextV(valueV);
 		screenTextPct(valuePct);
