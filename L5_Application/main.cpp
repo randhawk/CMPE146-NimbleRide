@@ -174,13 +174,6 @@ void screenSlider(int value){
 			value = (value == 100)? 99: value;
 			char num [2];
 			sprintf(num, "%d", value);
-			uart2_putchar('j');
-			uart2_putchar('0');
-			uart2_putchar('.');
-			uart2_putchar('v');
-			uart2_putchar('a');
-			uart2_putchar('l');
-			uart2_putchar('=');
 			uart2_putchar(num[0]);
 			if(value > 9)
 				uart2_putchar(num[1]);
@@ -192,18 +185,9 @@ void screenTextPct(int value){
 			value = (value == 100)? 99: value;
 			char num [2];
 			sprintf(num, "%d", value);
-			uart2_putchar('t');
-			uart2_putchar('1');
-			uart2_putchar('.');
-			uart2_putchar('t');
-			uart2_putchar('x');
-			uart2_putchar('t');
-			uart2_putchar('=');
-			uart2_putchar('"');
 			uart2_putchar(num[0]);
 			if(value > 9)
 				uart2_putchar(num[1]);
-			uart2_putchar('"');
 			uart2_end();
 			printf("DEBUG - SCREEN: Txt pct sent value: %i\n", value);
 }
@@ -212,20 +196,11 @@ void screenTextV(float value){
 			value = (value >= 100)? 99.99: value;
 			char num [5];
 			sprintf(num, "%f", value);
-			uart2_putchar('t');
-			uart2_putchar('0');
-			uart2_putchar('.');
-			uart2_putchar('t');
-			uart2_putchar('x');
-			uart2_putchar('t');
-			uart2_putchar('=');
-			uart2_putchar('"');
 			uart2_putchar(num[0]);
 			uart2_putchar(num[1]);
 			uart2_putchar(num[2]);
 			uart2_putchar(num[3]);
 			uart2_putchar(num[4]);
-			uart2_putchar('"');
 			uart2_end();
 			printf("DEBUG - SCREEN: Txt V sent value: %f\n", value);
 }
@@ -249,6 +224,65 @@ class uart2_send_task : public scheduler_task {
 		return true;
 	}
 };
+
+void u2_putchar (char out){
+	LPC_UART2 -> THR = out;
+			printf("sent character = %d \n\n", out);
+	while (1) {
+		if (LPC_UART2 -> LSR & (1 << 5)) {
+			break;
+		}
+	}
+}
+
+char u2_receive (void){
+	while (1) {
+		if (LPC_UART2 -> LSR & (1 << 0)) {
+			break;
+		}
+	}
+	char in = LPC_UART2 -> RBR;
+	return in;
+}
+
+class gpio_task: public scheduler_task {
+public:
+    gpio_task(uint8_t priority) :
+        scheduler_task("GPIO", 2000, priority) {
+    }
+    bool run(void*p) {
+    	//int count = 0;
+
+        if(LPC_GPIO2->FIOPIN & ( 1 << 0)){
+            LPC_GPIO1->FIOPIN |= (1 << 0); //RESET/CLEAR
+            printf("No data\n");
+            vTaskDelay(250);
+        }
+        else{
+            LPC_GPIO1->FIOPIN &= ~(1 << 0); //SET
+            printf("You have data!.\n");
+            u2_send('1');
+            vTaskDelay(250);
+
+        }
+
+        return true;
+    }
+
+    bool init(void) {
+        //Switch
+        LPC_GPIO2->FIODIR &= ~( 1 << 0 );
+
+        //LED
+        LPC_GPIO1->FIODIR |= ( 1 << 0 ); //Direction
+        LPC_GPIO1->FIOPIN |= ( 1 << 0 ); //Selection
+
+        u2_init(9600);
+
+        return true;
+    }
+
+
 
 /**
  * The main() creates tasks or "threads".  See the documentation of scheduler_task class at scheduler_task.hpp
@@ -280,6 +314,7 @@ int main(void)
     scheduler_add_task(new adc0_task(PRIORITY_HIGH));
     scheduler_add_task(new mosfet_task(PRIORITY_HIGH));
     scheduler_add_task(new uart2_send_task(PRIORITY_HIGH));
+    scheduler_add_task(new gpio_task(PRIORITY_HIGH));
 
 	scheduler_add_task(new terminalTask(PRIORITY_HIGH));
 
